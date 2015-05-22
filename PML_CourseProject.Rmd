@@ -1,0 +1,133 @@
+---
+title: "Project Report - Practical Machine Learning Course Project, May 2015"
+author: "Oleg Shvaikovsky"
+date: "Friday, May 22, 2015"
+output: html_document
+---
+
+  
+## Executive Summary
+
+This is a Course Project for Practical Machine Learning, done as a homework assignment of Coursera’s Practical Machine Learning from Johns Hopkins University. 
+
+In this analysis we are building a machine learning model capable of predicting which of 5 possible ways a person was performing a dumbell curl exercise. Accelerometers were placed on the belt, forearm, arm and dumbell of 6 participants and 160 measurements were taken.
+
+A random forest was applied to the data and was able to generate predictions with an approxiimate error rate of 99%. This was also confirmed against a validation set. This model was then used to generate 20 predictions for the Submission portion of the Practical Machine Learning Course Project with 100% accuracy.
+
+
+## Data
+
+The training data for this project are available here: 
+  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv 
+
+The test data are available here: 
+  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv 
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. I am using the chance to cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+
+## Goal of the analysis
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+
+## Analysis
+
+First of all I will load required libraries, setting the parameters
+```{r,echo = TRUE}
+library(caret)
+setwd("C:/_OlegDropbox/Dropbox/_ Nortal/BigData/R-Coursera/PML_CourseProject_May2015")
+```
+  
+Now we read the needed data. The data has been previously downloaded to the folder mentioned in setwd(). To save the time during the development of the project I will not to redownload every time the data from internet.  
+
+
+```{r, echo=TRUE}
+# reading data
+df <- read.csv(file = "data/pml-training.csv", sep = ",", head = TRUE,na.strings=c("NA","#DIV/0!",""))
+df_test <- read.csv(file = "data/pml-testing.csv", sep = ",", head = TRUE,na.strings=c("NA","#DIV/0!",""))
+```
+
+Now we are converting variables to be numeric. First 7 columns will be skiped as those do not infuence the classe variable. Other columns will be converted to numeric format.
+
+The data is much more suitable now to prooceed with the analysis. 
+
+```{r, echo=TRUE}
+df <- df[,-c(1:7)]
+for (i in (1:(dim(df)[2]-1))){
+  df[,i] <- as.numeric(as.character(df[,i]))
+}
+
+df_test <- df_test[,-c(1:7)]
+for (i in (1:(dim(df_test)[2]-1))){
+  df_test[,i] <- as.numeric(as.character(df_test[,i]))
+}
+
+non.na.columns <-apply(!is.na(df),2,sum)>19621
+# subset for non.na.columns
+df<- df[,non.na.columns]
+#names(non.na.columns)
+```
+
+There are numerous approaches to achieve data partition. For a more complete approach take a look at the _createDataPartition_ function in the _caret_ package. We will split data into training and cross-validation datasets
+
+```{r, echo=TRUE}
+inTrain <- createDataPartition(y=df$classe,p=0.6, list=FALSE)
+training <- df[inTrain,]
+validation <- df[-inTrain,]
+dim(training); 
+dim(validation)
+```
+
+
+Using randomForest algorithm for making classification model. The algorithm for inducing a random forest was developed by Leo Breiman[1] and Adele Cutler. The short decription of the algorithm is here: http://en.wikipedia.org/wiki/Random_forest. 
+
+
+
+```{r}
+Model<-train(classe~.,data=training,method="rf",
+             trControl=trainControl(method="cv",number=5),
+             prox=TRUE,allowParallel=TRUE)
+print(Model)
+```
+
+Now we will make a predictions on training set. We will use _predict_ function from _stats_ package for that. 
+
+```{r, echo=TRUE}
+pred.on.train <- predict(Model, newdata=training)
+print(confusionMatrix(pred.on.train,training$classe))
+```
+
+The problem here is that as the prediction on training set is 100% accurate, we will have very good model or overfitted model.
+
+Lets apply the prediction on validation dataset, using the same  _predict_ function from _stats_ package for that.
+
+```{r, echo=TRUE}
+pred.on.validation <- predict(Model, newdata=validation)
+print(confusionMatrix(pred.on.validation,validation$classe))
+```
+
+The accuracy of the model is 99% on the validation set that is equal to out of sample error level.
+As the validation set is randomly selected out of the initial data and has not been used in the training it should describe the actual results on very good level. 
+
+## Preparing for the testing data
+
+We will use the same code, as was provided by instructor (https://class.coursera.org/predmachlearn-014/assignment/view?assignment_id=5) to create test files. Goal is to upload the files later to: https://class.coursera.org/predmachlearn-014/assignment
+
+
+```{r}
+answers = rep("A", 20)
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+testing_data <- df_test[,non.na.columns[non.na.columns!='classe']]
+answers <- predict(Model, newdata=testing_data)
+
+pml_write_files(answers)
+```
+
